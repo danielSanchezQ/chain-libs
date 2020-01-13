@@ -56,7 +56,7 @@ impl<Id: BlockId> BlockInfo<Id> {
 }
 
 #[derive(Clone)]
-pub struct SQLiteBlockStore<B>
+pub struct BlockStore<B>
 where
     B: Block,
 {
@@ -64,7 +64,7 @@ where
     dummy: std::marker::PhantomData<B>,
 }
 
-impl<B> SQLiteBlockStore<B>
+impl<B> BlockStore<B>
 where
     B: Block,
 {
@@ -122,7 +122,7 @@ where
             .execute_batch("pragma journal_mode = WAL")
             .unwrap();
 
-        SQLiteBlockStore {
+        BlockStore {
             pool,
             dummy: std::marker::PhantomData,
         }
@@ -407,7 +407,7 @@ fn blob_to_hash<Id: BlockId>(blob: Vec<u8>) -> Id {
 /// The travelling algorithm uses back links to skip over parts of the chain,
 /// so the callback will not be invoked for all blocks in the linear sequence.
 pub fn for_path_to_nth_ancestor<B, F>(
-    store: &SQLiteBlockStore<B>,
+    store: &BlockStore<B>,
     block_hash: &B::Id,
     distance: u64,
     mut callback: F,
@@ -467,7 +467,7 @@ fn compute_fast_link(chain_length: u64) -> u64 {
 /// the half-open range `(from, to]`. `from` must be an ancestor
 /// of `to` and may be the zero hash.
 pub fn iterate_range<'store, B>(
-    store: &'store SQLiteBlockStore<B>,
+    store: &'store BlockStore<B>,
     from: &B::Id,
     to: &B::Id,
 ) -> Result<BlockIterator<'store, B>, Error>
@@ -493,7 +493,7 @@ pub struct BlockIterator<'store, B>
 where
     B: Block,
 {
-    store: &'store SQLiteBlockStore<B>,
+    store: &'store BlockStore<B>,
     to_chain_length: u64,
     cur_chain_length: u64,
     pending_infos: Vec<BlockInfo<B::Id>>,
@@ -689,10 +689,7 @@ pub mod tests {
         &v[s % v.len()]
     }
 
-    pub fn generate_chain<R: RngCore>(
-        rng: &mut R,
-        store: &mut SQLiteBlockStore<Block>,
-    ) -> Vec<Block> {
+    pub fn generate_chain<R: RngCore>(rng: &mut R, store: &mut BlockStore<Block>) -> Vec<Block> {
         let mut blocks = vec![];
 
         let genesis_block = Block::genesis();
@@ -715,8 +712,7 @@ pub mod tests {
 
     #[test]
     pub fn test_put_get() {
-        let mut store =
-            SQLiteBlockStore::<Block>::file("file:test_put_get?mode=memory&cache=shared");
+        let mut store = BlockStore::<Block>::file("file:test_put_get?mode=memory&cache=shared");
         assert!(store.get_tag("tip").unwrap().is_none());
 
         match store.put_tag("tip", &BlockId::zero()) {
@@ -741,7 +737,7 @@ pub mod tests {
     pub fn test_nth_ancestor() {
         let mut rng = OsRng;
         let mut store =
-            SQLiteBlockStore::<Block>::file("file:test_nth_ancestor?mode=memory&cache=shared");
+            BlockStore::<Block>::file("file:test_nth_ancestor?mode=memory&cache=shared");
         let blocks = generate_chain(&mut rng, &mut store);
 
         let mut blocks_fetched = 0;
@@ -784,7 +780,7 @@ pub mod tests {
     pub fn test_iterate_range() {
         let mut rng = OsRng;
         let mut store =
-            SQLiteBlockStore::<Block>::file("file:test_iterate_range?mode=memory&cache=shared");
+            BlockStore::<Block>::file("file:test_iterate_range?mode=memory&cache=shared");
         let blocks = generate_chain(&mut rng, &mut store);
 
         let blocks_by_id: HashMap<BlockId, &Block> = blocks.iter().map(|b| (b.id(), b)).collect();
@@ -819,9 +815,8 @@ pub mod tests {
     #[test]
     fn simultaneous_read_write() {
         let mut rng = OsRng;
-        let mut store = SQLiteBlockStore::<Block>::file(
-            "file:test_simultaneous_read_write?mode=memory&cache=shared",
-        );
+        let mut store =
+            BlockStore::<Block>::file("file:test_simultaneous_read_write?mode=memory&cache=shared");
 
         let genesis_block = Block::genesis();
         store.put_block(&genesis_block).unwrap();
