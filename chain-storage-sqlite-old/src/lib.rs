@@ -1,32 +1,24 @@
 use chain_core::property::{Block, BlockId, Serialize};
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::types::Value;
-use std::{error, fmt, path::Path};
+use std::path::Path;
+use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum Error {
+    #[error("block not found")]
     BlockNotFound, // FIXME: add BlockId
+    #[error("cannot iterate between the 2 given blocks")]
     CannotIterate,
-    BackendError(Box<dyn std::error::Error + Send + Sync>),
+    #[error("database backend error")]
+    BackendError(#[from] Box<dyn std::error::Error + Send + Sync>),
+    #[error("block0 is in the future")]
     Block0InFuture,
+    #[error("Block already present in DB")]
     BlockAlreadyPresent,
+    #[error("the parent block is missing for the required write")]
     MissingParent,
 }
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Error::BlockNotFound => write!(f, "block not found"),
-            Error::CannotIterate => write!(f, "cannot iterate between the 2 given blocks"),
-            Error::BackendError(err) => write!(f, "{}", err),
-            Error::Block0InFuture => write!(f, "block0 is in the future"),
-            Error::BlockAlreadyPresent => write!(f, "Block already present in DB"),
-            Error::MissingParent => write!(f, "the parent block is missing for the required write"),
-        }
-    }
-}
-
-impl error::Error for Error {}
 
 #[derive(Clone, Debug)]
 pub struct BackLink<Id: BlockId> {
